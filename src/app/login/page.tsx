@@ -1,6 +1,8 @@
 "use client";
 import { useState } from 'react';
 import { AlertCircle, CheckCircle2, User, Lock, Mail } from 'lucide-react';
+import { supabase } from '../lib/supabaseClient'; 
+import { useRouter } from 'next/navigation';
 
 type FormMode = 'login' | 'register';
 
@@ -29,49 +31,32 @@ export default function AuthPage() {
   const [errors, setErrors] = useState<FormErrors>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [successMessage, setSuccessMessage] = useState('');
+  const router = useRouter();
 
-  const validateEmail = (email: string): boolean => {
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    return emailRegex.test(email);
-  };
-
-  const validatePassword = (password: string): boolean => {
-    return password.length >= 8;
-  };
-
-  const validateUsername = (username: string): boolean => {
-    return username.length >= 3 && /^[a-zA-Z0-9_]+$/.test(username);
-  };
+  const validateEmail = (email: string): boolean => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+  const validatePassword = (password: string): boolean => password.length >= 8;
+  const validateUsername = (username: string): boolean => username.length >= 3 && /^[a-zA-Z0-9_]+$/.test(username);
 
   const validateForm = (): boolean => {
     const newErrors: FormErrors = {};
 
     if (mode === 'register') {
-      if (!formData.username) {
-        newErrors.username = 'El nombre de usuario es requerido';
-      } else if (!validateUsername(formData.username)) {
+      if (!formData.username) newErrors.username = 'El nombre de usuario es requerido';
+      else if (!validateUsername(formData.username))
         newErrors.username = 'El nombre debe tener al menos 3 caracteres y solo letras, números y guiones bajos';
-      }
     }
 
-    if (!formData.email) {
-      newErrors.email = 'El email es requerido';
-    } else if (!validateEmail(formData.email)) {
-      newErrors.email = 'El email no es válido';
-    }
+    if (!formData.email) newErrors.email = 'El email es requerido';
+    else if (!validateEmail(formData.email)) newErrors.email = 'El email no es válido';
 
-    if (!formData.password) {
-      newErrors.password = 'La contraseña es requerida';
-    } else if (!validatePassword(formData.password)) {
+    if (!formData.password) newErrors.password = 'La contraseña es requerida';
+    else if (!validatePassword(formData.password))
       newErrors.password = 'La contraseña debe tener al menos 8 caracteres';
-    }
 
     if (mode === 'register') {
-      if (!formData.confirmPassword) {
-        newErrors.confirmPassword = 'Confirma tu contraseña';
-      } else if (formData.password !== formData.confirmPassword) {
+      if (!formData.confirmPassword) newErrors.confirmPassword = 'Confirma tu contraseña';
+      else if (formData.password !== formData.confirmPassword)
         newErrors.confirmPassword = 'Las contraseñas no coinciden';
-      }
     }
 
     setErrors(newErrors);
@@ -81,7 +66,7 @@ export default function AuthPage() {
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
     setFormData(prev => ({ ...prev, [name]: value }));
-    
+
     if (errors[name as keyof FormErrors]) {
       setErrors(prev => ({ ...prev, [name]: undefined }));
     }
@@ -92,33 +77,44 @@ export default function AuthPage() {
     e.preventDefault();
     setSuccessMessage('');
 
-    if (!validateForm()) {
-      return;
-    }
+    if (!validateForm()) return;
 
     setIsSubmitting(true);
 
-    setTimeout(() => {
-      setIsSubmitting(false);
-      setSuccessMessage(
-        mode === 'login' 
-          ? '¡Inicio de sesión exitoso!' 
-          : '¡Registro exitoso! Ahora puedes iniciar sesión'
-      );
-      
+    try {
       if (mode === 'register') {
-        setTimeout(() => {
-          setMode('login');
-          setFormData({
-            username: '',
-            email: formData.email,
-            password: '',
-            confirmPassword: ''
-          });
-          setSuccessMessage('');
-        }, 2000);
+        // 🔹 REGISTRO EN SUPABASE
+        const { error } = await supabase.auth.signUp({
+          email: formData.email,
+          password: formData.password,
+          options: {
+            data: { username: formData.username },
+          },
+        });
+
+        if (error) throw error;
+
+        setSuccessMessage('¡Registro exitoso! Revisa tu correo para confirmar tu cuenta.');
+        setTimeout(() => setMode('login'), 2000);
+
+      } else {
+        // 🔹 LOGIN EN SUPABASE
+        const { error } = await supabase.auth.signInWithPassword({
+          email: formData.email,
+          password: formData.password,
+        });
+
+        if (error) throw error;
+
+        setSuccessMessage('¡Inicio de sesión exitoso!');
+        setTimeout(() => router.push('/dashboard'), 1500); // 👈 redirección tras login
       }
-    }, 1500);
+
+    } catch (error: any) {
+      setErrors({ email: error.message });
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const switchMode = () => {
@@ -145,8 +141,8 @@ export default function AuthPage() {
               {mode === 'login' ? 'Iniciar Sesión' : 'Crear Cuenta'}
             </h2>
             <p className="text-gray-500 mt-2">
-              {mode === 'login' 
-                ? 'Ingresa tus credenciales para continuar' 
+              {mode === 'login'
+                ? 'Ingresa tus credenciales para continuar'
                 : 'Completa el formulario para registrarte'}
             </p>
           </div>
@@ -172,9 +168,7 @@ export default function AuthPage() {
                     name="username"
                     value={formData.username}
                     onChange={handleInputChange}
-                    className={`w-full text-zinc-600 pl-10 pr-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition ${
-                      errors.username ? 'border-red-500' : 'border-gray-300'
-                    }`}
+                    className={`w-full text-zinc-600 pl-10 pr-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition ${errors.username ? 'border-red-500' : 'border-gray-300'}`}
                     placeholder="tu_usuario"
                   />
                 </div>
@@ -189,20 +183,18 @@ export default function AuthPage() {
 
             <div>
               <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-2">
-                {mode === 'login' ? 'Nombre de Usuario' : 'Email'}
+                {mode === 'login' ? 'Email' : 'Email'}
               </label>
               <div className="relative">
                 <Mail className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
                 <input
-                  type={mode === 'login' ? 'text' : 'email'}
+                  type="email"
                   id="email"
                   name="email"
                   value={formData.email}
                   onChange={handleInputChange}
-                  className={`w-full text-zinc-600 pl-10 pr-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition ${
-                    errors.email ? 'border-red-500' : 'border-gray-300'
-                  }`}
-                  placeholder={mode === 'login' ? 'tu_usuario' : 'tu@email.com'}
+                  className={`w-full text-zinc-600 pl-10 pr-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition ${errors.email ? 'border-red-500' : 'border-gray-300'}`}
+                  placeholder="tu@email.com"
                 />
               </div>
               {errors.email && (
@@ -225,9 +217,7 @@ export default function AuthPage() {
                   name="password"
                   value={formData.password}
                   onChange={handleInputChange}
-                  className={`w-full text-zinc-950 pl-10 pr-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition ${
-                    errors.password ? 'border-red-500' : 'border-gray-300'
-                  }`}
+                  className={`w-full text-zinc-950 pl-10 pr-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition ${errors.password ? 'border-red-500' : 'border-gray-300'}`}
                   placeholder="••••••••"
                 />
               </div>
@@ -252,9 +242,7 @@ export default function AuthPage() {
                     name="confirmPassword"
                     value={formData.confirmPassword}
                     onChange={handleInputChange}
-                    className={`w-full text-zinc-950 pl-10 pr-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition ${
-                      errors.confirmPassword ? 'border-red-500' : 'border-gray-300'
-                    }`}
+                    className={`w-full text-zinc-950 pl-10 pr-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition ${errors.confirmPassword ? 'border-red-500' : 'border-gray-300'}`}
                     placeholder="••••••••"
                   />
                 </div>
@@ -272,8 +260,8 @@ export default function AuthPage() {
               disabled={isSubmitting}
               className="w-full bg-gradient-to-r from-blue-500 to-purple-600 text-white py-3 rounded-lg font-semibold hover:from-blue-600 hover:to-purple-700 focus:ring-4 focus:ring-blue-300 transition disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              {isSubmitting 
-                ? 'Procesando...' 
+              {isSubmitting
+                ? 'Procesando...'
                 : mode === 'login' ? 'Iniciar Sesión' : 'Registrarse'}
             </button>
           </form>
