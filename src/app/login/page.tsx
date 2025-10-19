@@ -5,6 +5,7 @@ import { supabase } from '../lib/supabaseClient';
 import { useRouter } from 'next/navigation';
 
 type FormMode = 'login' | 'register';
+type UserRole = 'alumno' | 'profesor';
 
 interface FormData {
   username: string;
@@ -18,10 +19,12 @@ interface FormErrors {
   email?: string;
   password?: string;
   confirmPassword?: string;
+  role?: string;
 }
 
 export default function AuthPage() {
   const [mode, setMode] = useState<FormMode>('login');
+  const [role, setRole] = useState<UserRole>('alumno');
   const [formData, setFormData] = useState<FormData>({
     username: '',
     email: '',
@@ -44,6 +47,8 @@ export default function AuthPage() {
       if (!formData.username) newErrors.username = 'El nombre de usuario es requerido';
       else if (!validateUsername(formData.username))
         newErrors.username = 'El nombre debe tener al menos 3 caracteres y solo letras, números y guiones bajos';
+      
+      if (!role) newErrors.role = 'Debes seleccionar un rol';
     }
 
     if (!formData.email) newErrors.email = 'El email es requerido';
@@ -88,7 +93,10 @@ export default function AuthPage() {
           email: formData.email,
           password: formData.password,
           options: {
-            data: { username: formData.username },
+            data: { 
+              username: formData.username,
+              role: role 
+            },
           },
         });
 
@@ -99,15 +107,30 @@ export default function AuthPage() {
 
       } else {
         // 🔹 LOGIN EN SUPABASE
-        const { error } = await supabase.auth.signInWithPassword({
+        const { data: { session }, error } = await supabase.auth.signInWithPassword({
           email: formData.email,
           password: formData.password,
         });
 
         if (error) throw error;
+        if (!session) throw new Error('No se pudo iniciar sesión');
 
-        setSuccessMessage('¡Inicio de sesión exitoso!');
-        setTimeout(() => router.push('/dashboard'), 1500); // 👈 redirección tras login
+        // 🔹 OBTENER ROL DESDE USER_METADATA (temporal hasta crear tabla profiles)
+        const userRole = session.user.user_metadata.role as UserRole;
+
+        if (!userRole) {
+          throw new Error('No se encontró el rol del usuario');
+        }
+
+        setSuccessMessage('¡Inicio de sesión exitoso! Redirigiendo...');
+        
+        setTimeout(() => {
+          if (userRole === 'profesor') {
+            router.push('/dashboard-profesor');
+          } else {
+            router.push('/dashboard-alumno');
+          }
+        }, 1500);
       }
 
     } catch (error: any) {
@@ -121,6 +144,7 @@ export default function AuthPage() {
     setMode(mode === 'login' ? 'register' : 'login');
     setErrors({});
     setSuccessMessage('');
+    setRole('alumno');
     setFormData({
       username: '',
       email: '',
@@ -176,6 +200,46 @@ export default function AuthPage() {
                   <div className="flex items-center gap-1 mt-2 text-red-600 text-sm">
                     <AlertCircle className="w-4 h-4" />
                     <span>{errors.username}</span>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {mode === 'register' && (
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Selecciona tu rol
+                </label>
+                <div className="grid grid-cols-2 gap-4">
+                  <button
+                    type="button"
+                    onClick={() => setRole('alumno')}
+                    className={`px-4 py-3 border rounded-lg text-center transition ${
+                      role === 'alumno' 
+                        ? 'bg-blue-500 text-white border-blue-500 ring-2 ring-blue-300' 
+                        : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
+                    }`}
+                  >
+                    <span className="block text-2xl mb-1">👨‍🎓</span>
+                    <span className="block text-sm font-medium">Alumno</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setRole('profesor')}
+                    className={`px-4 py-3 border rounded-lg text-center transition ${
+                      role === 'profesor' 
+                        ? 'bg-purple-500 text-white border-purple-500 ring-2 ring-purple-300' 
+                        : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
+                    }`}
+                  >
+                    <span className="block text-2xl mb-1">👩‍🏫</span>
+                    <span className="block text-sm font-medium">Profesor</span>
+                  </button>
+                </div>
+                {errors.role && (
+                  <div className="flex items-center gap-1 mt-2 text-red-600 text-sm">
+                    <AlertCircle className="w-4 h-4" />
+                    <span>{errors.role}</span>
                   </div>
                 )}
               </div>
