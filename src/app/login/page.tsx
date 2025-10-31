@@ -1,7 +1,7 @@
 "use client";
 import { useState } from 'react';
 import { AlertCircle, CheckCircle2, User, Lock, Mail } from 'lucide-react';
-import { supabase } from '../lib/supabaseClient'; 
+import { supabase } from '../lib/supabaseClient'; // Ajusta la ruta según tu estructura
 import { useRouter } from 'next/navigation';
 
 type FormMode = 'login' | 'register';
@@ -88,8 +88,8 @@ export default function AuthPage() {
 
     try {
       if (mode === 'register') {
-        // 🔹 REGISTRO EN SUPABASE
-        const { error } = await supabase.auth.signUp({
+        // 🔹 PASO 1: REGISTRO EN SUPABASE AUTH
+        const { data: authData, error: authError } = await supabase.auth.signUp({
           email: formData.email,
           password: formData.password,
           options: {
@@ -100,29 +100,63 @@ export default function AuthPage() {
           },
         });
 
-        if (error) throw error;
+        if (authError) throw authError;
+        if (!authData.user) throw new Error('No se pudo crear el usuario');
+
+        // 🔹 PASO 2: CREAR PERFIL EN LA TABLA PROFILES
+        const { error: profileError } = await supabase
+          .from('profiles')
+          .insert({
+            id: authData.user.id,
+            username: formData.username,
+            email: formData.email,
+            role: role
+          });
+
+        if (profileError) {
+          console.error('Error creando perfil:', profileError);
+          throw new Error('Error al crear el perfil de usuario');
+        }
 
         setSuccessMessage('¡Registro exitoso! Revisa tu correo para confirmar tu cuenta.');
+        
+        // Limpiar formulario
+        setFormData({
+          username: '',
+          email: '',
+          password: '',
+          confirmPassword: ''
+        });
+        
         setTimeout(() => setMode('login'), 2000);
 
       } else {
-        // 🔹 LOGIN EN SUPABASE
-        const { data: { session }, error } = await supabase.auth.signInWithPassword({
+        // 🔹 LOGIN EN SUPABASE AUTH
+        const { data: { session }, error: authError } = await supabase.auth.signInWithPassword({
           email: formData.email,
           password: formData.password,
         });
 
-        if (error) throw error;
+        if (authError) throw authError;
         if (!session) throw new Error('No se pudo iniciar sesión');
 
-        // 🔹 OBTENER ROL DESDE USER_METADATA (temporal hasta crear tabla profiles)
-        const userRole = session.user.user_metadata.role as UserRole;
+        // 🔹 OBTENER ROL DESDE LA TABLA PROFILES
+        const { data: profile, error: profileError } = await supabase
+          .from('profiles')
+          .select('role, username')
+          .eq('id', session.user.id)
+          .single();
 
-        if (!userRole) {
-          throw new Error('No se encontró el rol del usuario');
+        if (profileError) {
+          console.error('Error obteniendo perfil:', profileError);
+          throw new Error('No se encontró el perfil del usuario');
         }
+        
+        if (!profile) throw new Error('No se encontró el perfil del usuario');
 
-        setSuccessMessage('¡Inicio de sesión exitoso! Redirigiendo...');
+        const userRole = profile.role as UserRole;
+
+        setSuccessMessage(`¡Bienvenido ${profile.username}! Redirigiendo...`);
         
         setTimeout(() => {
           if (userRole === 'profesor') {
@@ -134,7 +168,22 @@ export default function AuthPage() {
       }
 
     } catch (error: any) {
-      setErrors({ email: error.message });
+      console.error('Error en autenticación:', error);
+      
+      // Mensajes de error más específicos
+      let errorMessage = error.message;
+      
+      if (error.message.includes('duplicate key') || error.message.includes('already exists')) {
+        errorMessage = 'Este email o nombre de usuario ya está registrado';
+      } else if (error.message.includes('Invalid login credentials')) {
+        errorMessage = 'Email o contraseña incorrectos';
+      } else if (error.message.includes('Email not confirmed')) {
+        errorMessage = 'Por favor confirma tu email antes de iniciar sesión';
+      } else if (error.message.includes('User already registered')) {
+        errorMessage = 'Este email ya está registrado';
+      }
+      
+      setErrors({ email: errorMessage });
     } finally {
       setIsSubmitting(false);
     }
@@ -247,7 +296,7 @@ export default function AuthPage() {
 
             <div>
               <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-2">
-                {mode === 'login' ? 'Email' : 'Email'}
+                Email
               </label>
               <div className="relative">
                 <Mail className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
