@@ -2,7 +2,7 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '../lib/supabaseClient';
 import { useRouter } from 'next/navigation';
-import { Calendar, Plus, Users, LogOut } from 'lucide-react';
+import { Plus, Users, LogOut } from 'lucide-react';
 
 export default function DashboardProfesor() {
   const router = useRouter();
@@ -21,16 +21,31 @@ export default function DashboardProfesor() {
       return;
     }
 
-    // 🔹 OBTENER ROL DESDE USER_METADATA (temporal)
-    const userRole = session.user.user_metadata.role;
-    const username = session.user.user_metadata.username;
+    // 🔹 OBTENER ROL Y USERNAME DESDE LA TABLA PROFILES
+    const { data: profile, error } = await supabase
+      .from('profiles')
+      .select('role, username')
+      .eq('id', session.user.id)
+      .single();
 
-    if (userRole !== 'profesor') {
+    if (error) {
+      console.error('Error obteniendo perfil:', error);
+      router.push('/login');
+      return;
+    }
+
+    if (!profile) {
+      console.error('No se encontró el perfil del usuario');
+      router.push('/login');
+      return;
+    }
+
+    if (profile.role !== 'profesor') {
       router.push('/dashboard-alumno');
       return;
     }
 
-    setUser({ ...session.user, username, role: userRole });
+    setUser({ ...session.user, username: profile.username, role: profile.role });
     setLoading(false);
   };
 
@@ -77,33 +92,20 @@ export default function DashboardProfesor() {
           </p>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           <div className="bg-white p-6 rounded-lg shadow-md hover:shadow-lg transition">
             <div className="flex items-center gap-3 mb-4">
               <Plus className="w-8 h-8 text-blue-500" />
-              <h3 className="text-lg font-bold text-gray-800">Crear Horario</h3>
+              <h3 className="text-lg font-bold text-gray-800">Gestionar Horarios</h3>
             </div>
             <p className="text-gray-600 text-sm mb-4">
-              Agrega nuevos horarios disponibles para tus alumnos
+              Crea, edita y visualiza tus horarios disponibles para consultas
             </p>
             <button 
               onClick={() => router.push('/availableTime')}
               className="w-full bg-blue-500 text-white py-2 px-4 rounded-lg hover:bg-blue-600 transition"
             >
-              Crear Horario
-            </button>
-          </div>
-
-          <div className="bg-white p-6 rounded-lg shadow-md hover:shadow-lg transition">
-            <div className="flex items-center gap-3 mb-4">
-              <Calendar className="w-8 h-8 text-green-500" />
-              <h3 className="text-lg font-bold text-gray-800">Mis Horarios</h3>
-            </div>
-            <p className="text-gray-600 text-sm mb-4">
-              Ver y editar tus horarios publicados
-            </p>
-            <button className="w-full bg-green-500 text-white py-2 px-4 rounded-lg hover:bg-green-600 transition">
-              Ver Horarios
+              Ir a Horarios
             </button>
           </div>
 

@@ -1,28 +1,22 @@
-import React, { useState, useMemo, useCallback } from 'react';
+'use client';
+import React, { useState, useEffect } from 'react';
+import { supabase } from '../lib/supabaseClient';
 import WeeklyCalendar from '../components/WeeklyCalendarProps';
 
-// --- TIPOS Y DATOS MOCK --- //
+// --- TIPOS Y DATOS --- //
 type Modality = 'Presencial' | 'Online';
 type DayOfWeek = 'Lunes' | 'Martes' | 'Miércoles' | 'Jueves' | 'Viernes';
 
 interface AppointmentSlot {
   id: string;
   day: DayOfWeek;
-  startTime: string; // Formato "HH:MM"
-  duration: number; // en minutos
+  startTime: string;
+  duration: number;
   modalities: Modality[];
   location: string;
 }
 
-const initialSlots: AppointmentSlot[] = [
-  { id: '1', day: 'Lunes', startTime: '10:00', duration: 60, modalities: ['Presencial', 'Online'], location: 'Oficina 301, Edificio A' },
-  { id: '2', day: 'Miércoles', startTime: '14:30', duration: 45, modalities: ['Online'], location: 'Google Meet' },
-  { id: '3', day: 'Viernes', startTime: '09:00', duration: 90, modalities: ['Presencial'], location: 'Sala de reuniones B' },
-];
-
-
-// --- ICONOS SVG (para no usar dependencias externas) --- //
-
+// --- ICONOS SVG --- //
 const ClockIcon = ({ className = "w-5 h-5" }: { className?: string }) => (
   <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
 );
@@ -47,17 +41,61 @@ const TrashIcon = ({ className = "w-5 h-5" }: { className?: string }) => (
     <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>
 );
 
-
-// --- COMPONENTE GESTOR DE HORARIOS --- //
-
+// --- COMPONENTE PRINCIPAL --- //
 const AppointmentScheduler: React.FC = () => {
-    const [slots, setSlots] = useState<AppointmentSlot[]>(initialSlots);
+    const [slots, setSlots] = useState<AppointmentSlot[]>([]);
+    const [loading, setLoading] = useState(true);
+    const [userId, setUserId] = useState<string | null>(null);
     const [defaults, setDefaults] = useState({
         duration: 45,
         modalities: ['Presencial', 'Online'] as Modality[],
         location: 'Oficina 301, Edificio A',
     });
     const [editingSlot, setEditingSlot] = useState<AppointmentSlot | null>(null);
+
+    // Cargar horarios del profesor
+    useEffect(() => {
+        loadSlots();
+    }, []);
+
+    const loadSlots = async () => {
+        try {
+            const { data: { session } } = await supabase.auth.getSession();
+            
+            if (!session) {
+                console.error('No hay sesión activa');
+                setLoading(false);
+                return;
+            }
+
+            setUserId(session.user.id);
+
+            const { data, error } = await supabase
+                .from('available_slots')
+                .select('*')
+                .eq('professor_id', session.user.id)
+                .order('day', { ascending: true })
+                .order('start_time', { ascending: true });
+
+            if (error) throw error;
+
+            // Transformar datos de BD a formato del frontend
+            const transformedSlots: AppointmentSlot[] = (data || []).map(slot => ({
+                id: slot.id,
+                day: slot.day as DayOfWeek,
+                startTime: slot.start_time,
+                duration: slot.duration,
+                modalities: slot.modalities as Modality[],
+                location: slot.location
+            }));
+
+            setSlots(transformedSlots);
+        } catch (error: any) {
+            console.error('Error cargando horarios:', error);
+        } finally {
+            setLoading(false);
+        }
+    };
 
     const handleDefaultChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
         const { name, value } = e.target;
@@ -73,32 +111,98 @@ const AppointmentScheduler: React.FC = () => {
         });
     };
 
-    const addSlot = () => {
-        const newSlot: AppointmentSlot = {
-            id: crypto.randomUUID(),
-            day: 'Lunes',
-            startTime: '09:00',
-            ...defaults
-        };
-        setSlots(prev => [...prev, newSlot].sort((a,b) => a.startTime.localeCompare(b.startTime)));
-        setEditingSlot(newSlot); // Abrir para editar inmediatamente
+    const addSlot = async () => {
+        if (!userId) return;
+
+        try {
+            const newSlotData = {
+                professor_id: userId,
+                day: 'Lunes' as DayOfWeek,
+                start_time: '09:00',
+                duration: defaults.duration,
+                modalities: defaults.modalities,
+                location: defaults.location
+            };
+
+            const { data, error } = await supabase
+                .from('available_slots')
+                .insert([newSlotData])
+                .select()
+                .single();
+
+            if (error) throw error;
+
+            const newSlot: AppointmentSlot = {
+                id: data.id,
+                day: data.day as DayOfWeek,
+                startTime: data.start_time,
+                duration: data.duration,
+                modalities: data.modalities as Modality[],
+                location: data.location
+            };
+
+            setSlots(prev => [...prev, newSlot].sort((a,b) => a.startTime.localeCompare(b.startTime)));
+            setEditingSlot(newSlot);
+        } catch (error: any) {
+            console.error('Error creando horario:', error);
+            alert('Error al crear el horario');
+        }
     };
     
-    const updateSlot = (updatedSlot: AppointmentSlot) => {
-        setSlots(slots.map(s => s.id === updatedSlot.id ? updatedSlot : s));
-        setEditingSlot(null);
+    const updateSlot = async (updatedSlot: AppointmentSlot) => {
+        try {
+            const { error } = await supabase
+                .from('available_slots')
+                .update({
+                    day: updatedSlot.day,
+                    start_time: updatedSlot.startTime,
+                    duration: updatedSlot.duration,
+                    modalities: updatedSlot.modalities,
+                    location: updatedSlot.location,
+                    updated_at: new Date().toISOString()
+                })
+                .eq('id', updatedSlot.id);
+
+            if (error) throw error;
+
+            setSlots(slots.map(s => s.id === updatedSlot.id ? updatedSlot : s));
+            setEditingSlot(null);
+        } catch (error: any) {
+            console.error('Error actualizando horario:', error);
+            alert('Error al actualizar el horario');
+        }
     };
 
-    const deleteSlot = (id: string) => {
-        setSlots(slots.filter(s => s.id !== id));
-        if (editingSlot?.id === id) {
-            setEditingSlot(null);
+    const deleteSlot = async (id: string) => {
+        try {
+            const { error } = await supabase
+                .from('available_slots')
+                .delete()
+                .eq('id', id);
+
+            if (error) throw error;
+
+            setSlots(slots.filter(s => s.id !== id));
+            if (editingSlot?.id === id) {
+                setEditingSlot(null);
+            }
+        } catch (error: any) {
+            console.error('Error eliminando horario:', error);
+            alert('Error al eliminar el horario');
         }
     };
     
     const handleSlotCardClick = (slot: AppointmentSlot) => {
         setEditingSlot(slot);
     };
+
+    if (loading) {
+        return (
+            <div className="flex items-center justify-center min-h-screen">
+                <div className="text-xl text-gray-600 dark:text-gray-300">Cargando horarios...</div>
+            </div>
+        );
+    }
 
     return (
         <div className="p-4 sm:p-8">
@@ -186,8 +290,7 @@ const AppointmentScheduler: React.FC = () => {
     );
 };
 
-
-// --- FORMULARIO DE EDICIÓN (Subcomponente) --- //
+// --- FORMULARIO DE EDICIÓN --- //
 interface EditSlotFormProps {
     slot: AppointmentSlot;
     onSave: (slot: AppointmentSlot) => void;

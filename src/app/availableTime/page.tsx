@@ -22,15 +22,31 @@ export default function AvailableTimePage() {
       return;
     }
 
-    const userRole = session.user.user_metadata.role;
-    const username = session.user.user_metadata.username;
+    // 🔹 OBTENER ROL Y USERNAME DESDE LA TABLA PROFILES
+    const { data: profile, error } = await supabase
+      .from('profiles')
+      .select('role, username')
+      .eq('id', session.user.id)
+      .single();
 
-    if (userRole !== 'profesor') {
+    if (error) {
+      console.error('Error obteniendo perfil:', error);
+      router.push('/login');
+      return;
+    }
+
+    if (!profile) {
+      console.error('No se encontró el perfil del usuario');
+      router.push('/login');
+      return;
+    }
+
+    if (profile.role !== 'profesor') {
       router.push('/dashboard-alumno');
       return;
     }
 
-    setUser({ ...session.user, username, role: userRole });
+    setUser({ ...session.user, username: profile.username, role: profile.role });
     setLoading(false);
   };
 
