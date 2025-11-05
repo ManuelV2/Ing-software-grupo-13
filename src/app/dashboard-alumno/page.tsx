@@ -75,45 +75,21 @@ export default function DashboardAlumno() {
     router.push('/login');
   };
 
-    // FUNCIÓN DE DEBUG TEMPORAL - Agregar esto
-  const testSupabaseConnection = async () => {
-    console.log('=== TESTING SUPABASE CONNECTION ===');
-    
-    // Test 1: Ver sesión actual
-    const { data: { session } } = await supabase.auth.getSession();
-    console.log('1. User ID:', session?.user.id);
-    
-    // Test 2: Ver perfil
-    const { data: profile, error: profileError } = await supabase
-      .from('profiles')
-      .select('*')
-      .eq('id', session?.user.id)
-      .single();
-    console.log('2. Profile:', profile, 'Error:', profileError);
-    
-    // Test 3: Ver available_slots
-    const { data: slots, error: slotsError } = await supabase
-      .from('available_slots')
-      .select('*');
-    console.log('3. Available Slots:', slots, 'Error:', slotsError);
-    
-    // Test 4: Ver todos los perfiles
-    const { data: allProfiles, error: allProfilesError } = await supabase
-      .from('profiles')
-      .select('*');
-    console.log('4. All Profiles:', allProfiles, 'Error:', allProfilesError);
-    
-    alert('Revisa la consola del navegador (F12) para ver los resultados');
-  };
-
   const handleBookSlot = async (slot: AppointmentSlot, modality: Modality) => {
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+
       if (!session) {
-        alert('Debes iniciar sesión para reservar');
+        alert("Debes iniciar sesión para reservar");
         return;
       }
+
+      // Obtener semana y año actuales
+      const now = new Date();
+      const currentWeek = getISOWeek(now);
+      const currentYear = getISOYear(now);
 
       const appointmentData = {
         slot_id: slot.id,
@@ -124,32 +100,47 @@ export default function DashboardAlumno() {
         duration: slot.duration,
         modality: modality,
         location: slot.location,
-        status: 'confirmed'
+        status: "confirmed",
+        week_number: currentWeek, // 👈 NUEVO
+        year: currentYear, // 👈 NUEVO
       };
 
       const { data, error } = await supabase
-        .from('appointments')
+        .from("appointments")
         .insert([appointmentData])
         .select()
         .single();
 
       if (error) {
-        if (error.code === '23505') {
-          alert('Ya tienes una reserva para este horario');
+        if (error.code === "23505") {
+          alert("Este horario ya está reservado para esta semana");
         } else {
           throw error;
         }
         return;
       }
 
-      alert('¡Reserva creada exitosamente!');
-      // Forzar recarga de los componentes
-      setRefreshKey(prev => prev + 1);
-      setActiveView('appointments');
+      alert("¡Reserva creada exitosamente!");
+      setRefreshKey((prev) => prev + 1);
+      setActiveView("appointments");
     } catch (error: any) {
-      console.error('Error creando reserva:', error);
-      alert('Error al crear la reserva. Por favor intenta de nuevo.');
+      console.error("Error creando reserva:", error);
+      alert("Error al crear la reserva. Por favor intenta de nuevo.");
     }
+  };
+
+  const getISOWeek = (date: Date): number => {
+    const d = new Date(date);
+    d.setHours(0, 0, 0, 0);
+    d.setDate(d.getDate() + 4 - (d.getDay() || 7));
+    const yearStart = new Date(d.getFullYear(), 0, 1);
+    return Math.ceil((((d.getTime() - yearStart.getTime()) / 86400000) + 1) / 7);
+  };
+
+  const getISOYear = (date: Date): number => {
+    const d = new Date(date);
+    d.setDate(d.getDate() + 4 - (d.getDay() || 7));
+    return d.getFullYear();
   };
 
   if (loading) {
@@ -185,13 +176,6 @@ export default function DashboardAlumno() {
               Cerrar Sesión
             </button>
           </div>
-          {/* BOTÓN DE DEBUG TEMPORAL */}
-          <button
-            onClick={testSupabaseConnection}
-            className="flex items-center gap-2 px-4 py-2 bg-yellow-500 text-white rounded-lg hover:bg-yellow-600 transition"
-          >
-            🔍 Debug
-          </button>
         </div>
       </nav>
 

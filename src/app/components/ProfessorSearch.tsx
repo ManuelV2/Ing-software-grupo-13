@@ -30,12 +30,29 @@ interface AppointmentSlot {
   location: string;
   professor?: Professor;
   isBooked?: boolean;
+  isUnavailable?: boolean;
+  bookedByOthers?: boolean;
 }
 
 interface ProfessorSearchProps {
   onBookSlot: (slot: AppointmentSlot, modality: Modality) => void;
   currentUserId?: string;
 }
+
+// Helper functions para ISO week
+const getISOWeek = (date: Date): number => {
+  const d = new Date(date);
+  d.setHours(0, 0, 0, 0);
+  d.setDate(d.getDate() + 4 - (d.getDay() || 7));
+  const yearStart = new Date(d.getFullYear(), 0, 1);
+  return Math.ceil((((d.getTime() - yearStart.getTime()) / 86400000) + 1) / 7);
+};
+
+const getISOYear = (date: Date): number => {
+  const d = new Date(date);
+  d.setDate(d.getDate() + 4 - (d.getDay() || 7));
+  return d.getFullYear();
+};
 
 const ProfessorSearch: React.FC<ProfessorSearchProps> = ({
   onBookSlot,
@@ -70,76 +87,105 @@ const ProfessorSearch: React.FC<ProfessorSearchProps> = ({
   const loadData = async () => {
     setLoading(true);
     try {
-      // 1. Cargar SOLO perfiles de profesores
-      const { data: professors, error: profError } = await supabase
-        .from("profiles")
-        .select("id, username, email")
-        .eq("role", "profesor");
+      const now = new Date();
+      const currentWeek = getISOWeek(now);
+      const currentYear = getISOYear(now);
 
-      if (profError) throw profError;
+      console.log('🔍 DEBUG - Semana y año actuales:', { currentWeek, currentYear });
 
-      if (!professors || professors.length === 0) {
-        console.warn("No se encontraron perfiles de profesores.");
-        setAvailableSlots([]);
-        setFilteredSlots([]);
-        setLoading(false);
-        return;
-      }
-
-      // Crear un mapa y una lista de IDs para las siguientes consultas
-      const professorMap = new Map(professors.map((p) => [p.id, p]));
-      const professorIds = professors.map((p) => p.id);
-
-      // 2. Cargar slots DISPONIBLES que pertenezcan a esos profesores
+      // PASO 1: Obtener todos los slots disponibles
       const { data: slots, error: slotsError } = await supabase
         .from("available_slots")
-        .select("*")
-        .in("professor_id", professorIds); // Solo slots de profesores válidos
+        .select(`
+          *,
+          professor:profiles(id, username, email)
+        `);
 
-      if (slotsError) throw slotsError;
+      if (slotsError) {
+        console.error("❌ Error cargando slots:", slotsError);
+        throw slotsError;
+      }
+
+      console.log('✅ Slots obtenidos:', slots?.length || 0, slots);
 
       if (!slots || slots.length === 0) {
-        console.warn("No se encontraron slots para esos profesores.");
+        console.warn("⚠️ No se encontraron slots disponibles.");
         setAvailableSlots([]);
         setFilteredSlots([]);
         setLoading(false);
         return;
       }
 
-      // 3. Cargar (si hay usuario) las reservas (appointments) del estudiante actual
-      // Usar un Set es más rápido para verificar (lookup O(1))
-      let bookedSlotIds = new Set<string>();
-      if (currentUserId) {
-        const { data: appointments, error: appointmentsError } = await supabase
-          .from("appointments")
-          .select("slot_id")
-          .eq("student_id", currentUserId)
-          .eq("status", "confirmed"); // Solo contar las confirmadas
+      // PASO 2: Obtener TODAS las appointments de la semana actual
+      const { data: appointmentsData, error: appointmentsError } = await supabase
+        .from("appointments")
+        .select("slot_id, student_id, week_number, year, status")
+        .eq("week_number", currentWeek)
+        .eq("year", currentYear)
+        .eq("status", "confirmed");
 
-        if (appointmentsError) {
-          // No es un error fatal, solo un aviso
-          console.warn(
-            "Error cargando appointments del alumno:",
-            appointmentsError
-          );
-        }
-        if (appointments) {
-          bookedSlotIds = new Set(appointments.map((apt) => apt.slot_id));
-        }
+      if (appointmentsError) {
+        console.warn("⚠️ Error cargando appointments:", appointmentsError);
       }
 
-      // 4. Combinar TODA la información en un solo paso
-      const combinedSlots: AppointmentSlot[] = slots.map((slot) => ({
-        ...slot,
-        professor: professorMap.get(slot.professor_id), // <-- Añadir info del profesor
-        isBooked: bookedSlotIds.has(slot.id), // <-- Añadir estado de reserva
-      }));
+      console.log('📅 Appointments de esta semana:', appointmentsData?.length || 0, appointmentsData);
 
-      // 5. Actualizar estados
+      // PASO 3: Crear un mapa de appointments por slot_id
+      const appointmentsMap = new Map<string, any[]>();
+      (appointmentsData || []).forEach(apt => {
+        if (!appointmentsMap.has(apt.slot_id)) {
+          appointmentsMap.set(apt.slot_id, []);
+        }
+        appointmentsMap.get(apt.slot_id)!.push(apt);
+      });
+
+      console.log('🗺️ Mapa de appointments:', Object.fromEntries(appointmentsMap));
+
+      // PASO 4: Combinar los datos
+      const combinedSlots: AppointmentSlot[] = slots.map((slot: any) => {
+        const slotAppointments = appointmentsMap.get(slot.id) || [];
+        
+        const isBookedByCurrentUser = slotAppointments.some(
+          apt => apt.student_id === currentUserId
+        );
+        const isBookedByAnyone = slotAppointments.length > 0;
+
+        console.log(`🔹 Slot ${slot.id} (${slot.day} ${slot.start_time}):`, {
+          slotAppointments: slotAppointments.length,
+          isBookedByCurrentUser,
+          isBookedByAnyone,
+          bookedByOthers: isBookedByAnyone && !isBookedByCurrentUser,
+          currentUserId
+        });
+
+        return {
+          id: slot.id,
+          professor_id: slot.professor_id,
+          day: slot.day as DayOfWeek,
+          start_time: slot.start_time,
+          duration: slot.duration,
+          modalities: slot.modalities as Modality[],
+          location: slot.location,
+          professor: slot.professor,
+          isBooked: isBookedByCurrentUser,
+          isUnavailable: isBookedByAnyone,
+          bookedByOthers: isBookedByAnyone && !isBookedByCurrentUser,
+        };
+      });
+
+      console.log('✅ Slots combinados finales:', combinedSlots.map(s => ({
+        id: s.id,
+        day: s.day,
+        time: s.start_time,
+        isBooked: s.isBooked,
+        isUnavailable: s.isUnavailable,
+        bookedByOthers: s.bookedByOthers
+      })));
+
       setAvailableSlots(combinedSlots);
-      setFilteredSlots(combinedSlots); // Inicialmente, mostrar todo
+      setFilteredSlots(combinedSlots);
     } catch (error: any) {
-      console.error("Error cargando datos:", error);
+      console.error("❌ Error cargando datos:", error);
       alert("Error al cargar los horarios disponibles. Revisa la consola.");
     } finally {
       setLoading(false);
@@ -149,7 +195,6 @@ const ProfessorSearch: React.FC<ProfessorSearchProps> = ({
   const filterSlots = () => {
     let filtered = [...availableSlots];
 
-    // Filtrar por término de búsqueda (nombre del profesor)
     if (searchTerm) {
       filtered = filtered.filter((slot) =>
         slot.professor?.username
@@ -158,12 +203,10 @@ const ProfessorSearch: React.FC<ProfessorSearchProps> = ({
       );
     }
 
-    // Filtrar por día
     if (selectedDay !== "Todos") {
       filtered = filtered.filter((slot) => slot.day === selectedDay);
     }
 
-    // Filtrar por modalidad
     if (selectedModality !== "Todos") {
       filtered = filtered.filter((slot) =>
         slot.modalities.includes(selectedModality)
@@ -326,8 +369,8 @@ const SlotCard: React.FC<SlotCardProps> = ({ slot, onBookSlot }) => {
   const [showModal, setShowModal] = useState(false);
 
   const handleBook = () => {
-    if (slot.isBooked) {
-      alert("Ya tienes una reserva para este horario");
+    if (slot.isUnavailable) {
+      alert("Este horario ya no está disponible.");
       return;
     }
     setShowModal(true);
@@ -338,18 +381,25 @@ const SlotCard: React.FC<SlotCardProps> = ({ slot, onBookSlot }) => {
     setShowModal(false);
   };
 
+  const isDisabled = slot.isUnavailable;
+
   return (
     <>
       <div
         className={`bg-gray-50 dark:bg-gray-700 p-4 rounded-xl border-2 transition-all ${
-          slot.isBooked
-            ? "border-orange-400 dark:border-orange-500 opacity-75"
+          isDisabled
+            ? "border-gray-400 dark:border-gray-500 opacity-60"
             : "border-gray-200 dark:border-gray-600 hover:shadow-md hover:border-blue-300"
         }`}
       >
         {slot.isBooked && (
           <div className="bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-400 px-2 py-1 rounded text-xs font-semibold mb-2 inline-block">
-            YA RESERVADO
+            YA RESERVASTE
+          </div>
+        )}
+        {slot.bookedByOthers && (
+          <div className="bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400 px-2 py-1 rounded text-xs font-semibold mb-2 inline-block">
+            NO DISPONIBLE
           </div>
         )}
 
@@ -382,14 +432,18 @@ const SlotCard: React.FC<SlotCardProps> = ({ slot, onBookSlot }) => {
 
         <button
           onClick={handleBook}
-          disabled={slot.isBooked}
+          disabled={isDisabled}
           className={`w-full font-semibold py-2 px-4 rounded-lg transition-colors ${
-            slot.isBooked
+            isDisabled
               ? "bg-gray-300 dark:bg-gray-600 text-gray-500 dark:text-gray-400 cursor-not-allowed"
               : "bg-blue-600 text-white hover:bg-blue-700"
           }`}
         >
-          {slot.isBooked ? "Ya Reservado" : "Reservar"}
+          {slot.isBooked
+            ? "Ya Reservado"
+            : slot.bookedByOthers
+            ? "No Disponible"
+            : "Reservar"}
         </button>
       </div>
 

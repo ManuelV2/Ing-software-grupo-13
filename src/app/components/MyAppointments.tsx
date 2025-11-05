@@ -53,48 +53,58 @@ const MyAppointments: React.FC = () => {
         return;
       }
 
-      // Cargar appointments
-      const { data: appointments, error } = await supabase
+      const now = new Date();
+      const currentWeek = getISOWeek(now);
+      const currentYear = getISOYear(now);
+
+      // PASO 1: Cargar appointments del alumno
+      const { data: appointments, error: appointmentsError } = await supabase
         .from("appointments")
         .select("*")
         .eq("student_id", session.user.id)
+        .eq("week_number", currentWeek)
+        .eq("year", currentYear)
         .order("day", { ascending: true })
         .order("start_time", { ascending: true });
 
-      if (error) {
-        console.error("Error cargando appointments:", error);
-        throw error;
+      if (appointmentsError) {
+        console.error("Error cargando appointments:", appointmentsError);
+        throw appointmentsError;
       }
 
-      // Cargar información de profesores
+      if (!appointments || appointments.length === 0) {
+        setAppointments([]);
+        setLoading(false);
+        return;
+      }
+
+      // PASO 2: Obtener IDs únicos de profesores
       const professorIds = [
-        ...new Set(appointments?.map((apt) => apt.professor_id) || []),
+        ...new Set(appointments.map((apt) => apt.professor_id)),
       ];
-      const { data: professors, error: profError } = await supabase
+
+      // PASO 3: Cargar perfiles de los profesores
+      const { data: professors, error: professorsError } = await supabase
         .from("profiles")
         .select("id, username, email")
         .in("id", professorIds);
 
-      if (profError) {
-        console.error("Error cargando profesores:", profError);
-        throw profError;
+      if (professorsError) {
+        console.error("Error cargando perfiles de profesores:", professorsError);
+        throw professorsError;
       }
 
-      // Crear un mapa de profesores
-      const professorMap = new Map(
-        professors?.map((p) => [
-          p.id,
-          { username: p.username, email: p.email },
-        ]) || []
+      // PASO 4: Combinar los datos
+      const professorsMap = new Map(
+        (professors || []).map((prof) => [prof.id, prof])
       );
 
-      // Combinar datos
-      const appointmentsWithProfessors = (appointments || []).map((apt) => ({
+      const enrichedAppointments = appointments.map((apt) => ({
         ...apt,
-        professor: professorMap.get(apt.professor_id),
+        professor: professorsMap.get(apt.professor_id),
       }));
 
-      setAppointments(appointmentsWithProfessors);
+      setAppointments(enrichedAppointments);
     } catch (error: any) {
       console.error("Error cargando reservas:", error);
       alert(
@@ -311,6 +321,20 @@ const AppointmentCard: React.FC<AppointmentCardProps> = ({
       )}
     </div>
   );
+};
+
+const getISOWeek = (date: Date): number => {
+  const d = new Date(date);
+  d.setHours(0, 0, 0, 0);
+  d.setDate(d.getDate() + 4 - (d.getDay() || 7));
+  const yearStart = new Date(d.getFullYear(), 0, 1);
+  return Math.ceil((((d.getTime() - yearStart.getTime()) / 86400000) + 1) / 7);
+};
+
+const getISOYear = (date: Date): number => {
+  const d = new Date(date);
+  d.setDate(d.getDate() + 4 - (d.getDay() || 7));
+  return d.getFullYear();
 };
 
 export default MyAppointments;
