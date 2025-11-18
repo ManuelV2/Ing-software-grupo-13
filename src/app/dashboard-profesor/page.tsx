@@ -1,10 +1,10 @@
 "use client";
-import { useEffect, useState } from 'react';
-import { supabase } from '../lib/supabaseClient';
-import { useRouter } from 'next/navigation';
-import { Plus, Users, LogOut } from 'lucide-react';
-import { Calendar } from 'lucide-react';
-import CalendarExport from '../components/CalendarExport';
+import { useEffect, useState } from "react";
+import { supabase } from "../lib/supabaseClient";
+import { useRouter } from "next/navigation";
+import { Plus, Users, LogOut } from "lucide-react";
+import { Calendar } from "lucide-react";
+import CalendarExport from "../components/CalendarExport";
 
 export default function DashboardProfesor() {
   const router = useRouter();
@@ -17,44 +17,50 @@ export default function DashboardProfesor() {
   }, []);
 
   const checkUser = async () => {
-    const { data: { session } } = await supabase.auth.getSession();
-    
+    const {
+      data: { session },
+    } = await supabase.auth.getSession();
+
     if (!session) {
-      router.push('/login');
+      router.push("/login");
       return;
     }
 
     // 🔹 OBTENER ROL Y USERNAME DESDE LA TABLA PROFILES
     const { data: profile, error } = await supabase
-      .from('profiles')
-      .select('role, username')
-      .eq('id', session.user.id)
+      .from("profiles")
+      .select("role, username")
+      .eq("id", session.user.id)
       .single();
 
     if (error) {
-      console.error('Error obteniendo perfil:', error);
-      router.push('/login');
+      console.error("Error obteniendo perfil:", error);
+      router.push("/login");
       return;
     }
 
     if (!profile) {
-      console.error('No se encontró el perfil del usuario');
-      router.push('/login');
+      console.error("No se encontró el perfil del usuario");
+      router.push("/login");
       return;
     }
 
-    if (profile.role !== 'profesor') {
-      router.push('/dashboard-alumno');
+    if (profile.role !== "profesor") {
+      router.push("/dashboard-alumno");
       return;
     }
 
-    setUser({ ...session.user, username: profile.username, role: profile.role });
+    setUser({
+      ...session.user,
+      username: profile.username,
+      role: profile.role,
+    });
     setLoading(false);
   };
 
   const handleLogout = async () => {
     await supabase.auth.signOut();
-    router.push('/login');
+    router.push("/login");
   };
 
   if (loading) {
@@ -72,7 +78,9 @@ export default function DashboardProfesor() {
           <div className="flex justify-between items-center h-16">
             <div className="flex items-center gap-3">
               <span className="text-3xl">👩‍🏫</span>
-              <h1 className="text-xl font-bold text-gray-800">Dashboard Profesor</h1>
+              <h1 className="text-xl font-bold text-gray-800">
+                Dashboard Profesor
+              </h1>
             </div>
             <button
               onClick={handleLogout}
@@ -91,7 +99,8 @@ export default function DashboardProfesor() {
             ¡Bienvenido, Profesor {user?.username}! 🎓
           </h2>
           <p className="text-gray-600">
-            Gestiona tus horarios disponibles y revisa las reservas de tus alumnos.
+            Gestiona tus horarios disponibles y revisa las reservas de tus
+            alumnos.
           </p>
         </div>
 
@@ -99,13 +108,15 @@ export default function DashboardProfesor() {
           <div className="bg-white p-6 rounded-lg shadow-md hover:shadow-lg transition">
             <div className="flex items-center gap-3 mb-4">
               <Plus className="w-8 h-8 text-blue-500" />
-              <h3 className="text-lg font-bold text-gray-800">Gestionar Horarios</h3>
+              <h3 className="text-lg font-bold text-gray-800">
+                Gestionar Horarios
+              </h3>
             </div>
             <p className="text-gray-600 text-sm mb-4">
               Crea, edita y visualiza tus horarios disponibles para consultas
             </p>
-            <button 
-              onClick={() => router.push('/availableTime')}
+            <button
+              onClick={() => router.push("/availableTime")}
               className="w-full bg-blue-500 text-white py-2 px-4 rounded-lg hover:bg-blue-600 transition"
             >
               Ir a Horarios
@@ -115,12 +126,17 @@ export default function DashboardProfesor() {
           <div className="bg-white p-6 rounded-lg shadow-md hover:shadow-lg transition">
             <div className="flex items-center gap-3 mb-4">
               <Users className="w-8 h-8 text-purple-500" />
-              <h3 className="text-lg font-bold text-gray-800">Reservas Recibidas</h3>
+              <h3 className="text-lg font-bold text-gray-800">
+                Reservas Recibidas
+              </h3>
             </div>
             <p className="text-gray-600 text-sm mb-4">
               Gestiona las reservas de tus alumnos
             </p>
-            <button className="w-full bg-purple-500 text-white py-2 px-4 rounded-lg hover:bg-purple-600 transition">
+            <button
+              onClick={() => router.push("/reservas-profesor")}
+              className="w-full bg-purple-500 text-white py-2 px-4 rounded-lg hover:bg-purple-600 transition"
+            >
               Ver Reservas
             </button>
           </div>
@@ -129,16 +145,18 @@ export default function DashboardProfesor() {
           <div className="bg-white p-6 rounded-lg shadow-md hover:shadow-lg transition">
             <div className="flex items-center gap-3 mb-4">
               <Calendar className="w-8 h-8 text-green-500" />
-              <h3 className="text-lg font-bold text-gray-800">Exportar Calendario</h3>
+              <h3 className="text-lg font-bold text-gray-800">
+                Exportar Calendario
+              </h3>
             </div>
             <p className="text-gray-600 text-sm mb-4">
               Descarga tus citas para importarlas a tu calendario
             </p>
-            <button 
+            <button
               onClick={() => setShowCalendarExport(!showCalendarExport)}
               className="w-full bg-green-500 text-white py-2 px-4 rounded-lg hover:bg-green-600 transition"
             >
-              {showCalendarExport ? 'Ocultar' : 'Mostrar'}
+              {showCalendarExport ? "Ocultar" : "Mostrar"}
             </button>
           </div>
         </div>
