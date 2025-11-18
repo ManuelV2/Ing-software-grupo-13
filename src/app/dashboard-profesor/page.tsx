@@ -3,11 +3,14 @@ import { useEffect, useState } from 'react';
 import { supabase } from '../lib/supabaseClient';
 import { useRouter } from 'next/navigation';
 import { Plus, Users, LogOut } from 'lucide-react';
+import { Calendar } from 'lucide-react';
+import CalendarExport from '../components/CalendarExport';
 
 export default function DashboardProfesor() {
   const router = useRouter();
   const [user, setUser] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const [showCalendarExport, setShowCalendarExport] = useState(false);
 
   useEffect(() => {
     checkUser();
@@ -121,7 +124,31 @@ export default function DashboardProfesor() {
               Ver Reservas
             </button>
           </div>
+
+          {/* NUEVA CARD - Exportar Calendario */}
+          <div className="bg-white p-6 rounded-lg shadow-md hover:shadow-lg transition">
+            <div className="flex items-center gap-3 mb-4">
+              <Calendar className="w-8 h-8 text-green-500" />
+              <h3 className="text-lg font-bold text-gray-800">Exportar Calendario</h3>
+            </div>
+            <p className="text-gray-600 text-sm mb-4">
+              Descarga tus citas para importarlas a tu calendario
+            </p>
+            <button 
+              onClick={() => setShowCalendarExport(!showCalendarExport)}
+              className="w-full bg-green-500 text-white py-2 px-4 rounded-lg hover:bg-green-600 transition"
+            >
+              {showCalendarExport ? 'Ocultar' : 'Mostrar'}
+            </button>
+          </div>
         </div>
+
+        {/* Agregar después del grid, el componente de exportación */}
+        {showCalendarExport && (
+          <div className="mt-6">
+            <CalendarExport userId={user?.id} userRole="profesor" />
+          </div>
+        )}
       </main>
     </div>
   );

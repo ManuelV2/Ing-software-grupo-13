@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { Calendar, LogOut, Search, BookOpen } from 'lucide-react';
 import ProfessorSearch from '../components/ProfessorSearch';
 import MyAppointments from '../components/MyAppointments';
+import CalendarExport from '../components/CalendarExport';
 
 type Modality = 'Presencial' | 'Online';
 type DayOfWeek = 'Lunes' | 'Martes' | 'Miércoles' | 'Jueves' | 'Viernes';
@@ -299,7 +300,13 @@ export default function DashboardAlumno() {
         )}
 
         {activeView === 'appointments' && (
-          <MyAppointments key={refreshKey} />
+          <div className="space-y-6">
+            {/* Agregar el componente de exportación */}
+            <CalendarExport userId={user?.id} userRole="alumno" />
+            
+            {/* Componente existente de citas */}
+            <MyAppointments key={refreshKey} />
+          </div>
         )}
       </main>
     </div>
