@@ -116,16 +116,48 @@ export default function DashboardAlumno() {
         if (error.code === "23505") {
           alert("Este horario ya está reservado para esta semana");
         } else {
-          throw error;
+          console.error("Error de Supabase al crear cita:", error);
+          alert("Ocurrió un error al crear la reserva.");
         }
         return;
       }
 
+      // 🔹 AQUÍ VIENE LO NUEVO: llamar a la API que manda correos
+      try {
+        console.log("→ Llamando a /api/send-reservation-email...");
+        const res = await fetch("/api/send-reservation-email", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            studentEmail: session.user.email,
+            professorEmail: slot.professor?.email,
+            studentName: user?.username,
+            professorName: slot.professor?.username,
+            day: slot.day,
+            startTime: slot.start_time,
+            duration: slot.duration,
+            modality,
+            location: slot.location,
+          }),
+        });
+
+        console.log("← Respuesta de /api/send-reservation-email:", res.status);
+
+        if (!res.ok) {
+          const data = await res.json().catch(() => null);
+          console.error("❌ Error en API de correo:", data);
+        }
+      } catch (emailError) {
+        console.error("🔥 Error llamando a /api/send-reservation-email:", emailError);
+      }
+
+
+      // 🔹 Esto ya lo tenías: feedback al usuario
       alert("¡Reserva creada exitosamente!");
       setRefreshKey((prev) => prev + 1);
       setActiveView("appointments");
     } catch (error: any) {
-      console.error("Error creando reserva:", error);
+      console.error("Error general al crear la reserva:", error);
       alert("Error al crear la reserva. Por favor intenta de nuevo.");
     }
   };
