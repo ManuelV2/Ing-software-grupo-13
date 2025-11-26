@@ -72,13 +72,13 @@ export default function DashboardProfesor() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <nav className="bg-white shadow-sm border-b">
+    <div className="min-h-screen bg-gray-800">
+      <nav className="bg-gray-900 shadow-sm border-b">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center h-16">
             <div className="flex items-center gap-3">
               <span className="text-3xl">👩‍🏫</span>
-              <h1 className="text-xl font-bold text-gray-800">
+              <h1 className="text-xl font-bold text-gray-50">
                 Dashboard Profesor
               </h1>
             </div>
@@ -94,25 +94,25 @@ export default function DashboardProfesor() {
       </nav>
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div className="bg-white rounded-lg shadow-md p-6 mb-8">
-          <h2 className="text-2xl font-bold text-gray-800 mb-2">
+        <div className="bg-gray-900 rounded-lg shadow-md p-6 mb-8">
+          <h2 className="text-2xl font-bold text-gray-50 mb-2">
             ¡Bienvenido, Profesor {user?.username}! 🎓
           </h2>
-          <p className="text-gray-600">
+          <p className="text-gray-100">
             Gestiona tus horarios disponibles y revisa las reservas de tus
             alumnos.
           </p>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <div className="bg-white p-6 rounded-lg shadow-md hover:shadow-lg transition">
+          <div className="bg-gray-900 p-6 rounded-lg shadow-md hover:shadow-lg transition">
             <div className="flex items-center gap-3 mb-4">
               <Plus className="w-8 h-8 text-blue-500" />
-              <h3 className="text-lg font-bold text-gray-800">
+              <h3 className="text-lg font-bold text-gray-50">
                 Gestionar Horarios
               </h3>
             </div>
-            <p className="text-gray-600 text-sm mb-4">
+            <p className="text-gray-100 text-sm mb-4">
               Crea, edita y visualiza tus horarios disponibles para consultas
             </p>
             <button
@@ -123,14 +123,14 @@ export default function DashboardProfesor() {
             </button>
           </div>
 
-          <div className="bg-white p-6 rounded-lg shadow-md hover:shadow-lg transition">
+          <div className="bg-gray-900 p-6 rounded-lg shadow-md hover:shadow-lg transition">
             <div className="flex items-center gap-3 mb-4">
               <Users className="w-8 h-8 text-purple-500" />
-              <h3 className="text-lg font-bold text-gray-800">
+              <h3 className="text-lg font-bold text-gray-50">
                 Reservas Recibidas
               </h3>
             </div>
-            <p className="text-gray-600 text-sm mb-4">
+            <p className="text-gray-100 text-sm mb-4">
               Gestiona las reservas de tus alumnos
             </p>
             <button
@@ -142,14 +142,14 @@ export default function DashboardProfesor() {
           </div>
 
           {/* NUEVA CARD - Exportar Calendario */}
-          <div className="bg-white p-6 rounded-lg shadow-md hover:shadow-lg transition">
+          <div className="bg-gray-900 p-6 rounded-lg shadow-md hover:shadow-lg transition">
             <div className="flex items-center gap-3 mb-4">
               <Calendar className="w-8 h-8 text-green-500" />
-              <h3 className="text-lg font-bold text-gray-800">
+              <h3 className="text-lg font-bold text-gray-50">
                 Exportar Calendario
               </h3>
             </div>
-            <p className="text-gray-600 text-sm mb-4">
+            <p className="text-gray-100 text-sm mb-4">
               Descarga tus citas para importarlas a tu calendario
             </p>
             <button
