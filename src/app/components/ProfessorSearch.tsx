@@ -45,7 +45,7 @@ const getISOWeek = (date: Date): number => {
   d.setHours(0, 0, 0, 0);
   d.setDate(d.getDate() + 4 - (d.getDay() || 7));
   const yearStart = new Date(d.getFullYear(), 0, 1);
-  return Math.ceil((((d.getTime() - yearStart.getTime()) / 86400000) + 1) / 7);
+  return Math.ceil(((d.getTime() - yearStart.getTime()) / 86400000 + 1) / 7);
 };
 
 const getISOYear = (date: Date): number => {
@@ -91,12 +91,15 @@ const ProfessorSearch: React.FC<ProfessorSearchProps> = ({
       const currentWeek = getISOWeek(now);
       const currentYear = getISOYear(now);
 
-      console.log('🔍 DEBUG - Semana y año actuales:', { currentWeek, currentYear });
+      console.log("🔍 DEBUG - Semana y año actuales:", {
+        currentWeek,
+        currentYear,
+      });
 
       // PASO 1: Obtener todos los slots disponibles
-      const { data: slots, error: slotsError } = await supabase
-        .from("available_slots")
-        .select(`
+      const { data: slots, error: slotsError } = await supabase.from(
+        "available_slots"
+      ).select(`
           *,
           professor:profiles(id, username, email)
         `);
@@ -106,7 +109,7 @@ const ProfessorSearch: React.FC<ProfessorSearchProps> = ({
         throw slotsError;
       }
 
-      console.log('✅ Slots obtenidos:', slots?.length || 0, slots);
+      console.log("✅ Slots obtenidos:", slots?.length || 0, slots);
 
       if (!slots || slots.length === 0) {
         console.warn("⚠️ No se encontraron slots disponibles.");
@@ -117,36 +120,44 @@ const ProfessorSearch: React.FC<ProfessorSearchProps> = ({
       }
 
       // PASO 2: Obtener TODAS las appointments de la semana actual
-      const { data: appointmentsData, error: appointmentsError } = await supabase
-        .from("appointments")
-        .select("slot_id, student_id, week_number, year, status")
-        .eq("week_number", currentWeek)
-        .eq("year", currentYear)
-        .eq("status", "confirmed");
+      const { data: appointmentsData, error: appointmentsError } =
+        await supabase
+          .from("appointments")
+          .select("slot_id, student_id, week_number, year, status")
+          .eq("week_number", currentWeek)
+          .eq("year", currentYear)
+          .eq("status", "confirmed");
 
       if (appointmentsError) {
         console.warn("⚠️ Error cargando appointments:", appointmentsError);
       }
 
-      console.log('📅 Appointments de esta semana:', appointmentsData?.length || 0, appointmentsData);
+      console.log(
+        "📅 Appointments de esta semana:",
+        appointmentsData?.length || 0,
+        appointmentsData
+      );
 
       // PASO 3: Crear un mapa de appointments por slot_id
       const appointmentsMap = new Map<string, any[]>();
-      (appointmentsData || []).forEach(apt => {
+      (appointmentsData || []).forEach((apt) => {
         if (!appointmentsMap.has(apt.slot_id)) {
           appointmentsMap.set(apt.slot_id, []);
         }
         appointmentsMap.get(apt.slot_id)!.push(apt);
       });
 
-      console.log('🗺️ Mapa de appointments:', Object.fromEntries(appointmentsMap));
+      console.log(
+        "🗺️ Mapa de appointments:",
+        Object.fromEntries(appointmentsMap)
+      );
 
       // PASO 4: Combinar los datos
       const combinedSlots: AppointmentSlot[] = slots.map((slot: any) => {
         const slotAppointments = appointmentsMap.get(slot.id) || [];
-        
+
         const isBookedByCurrentUser = slotAppointments.some(
-          apt => apt.student_id === currentUserId
+          (apt) => apt.student_id === currentUserId
         );
         const isBookedByAnyone = slotAppointments.length > 0;
 
@@ -155,7 +166,7 @@ const ProfessorSearch: React.FC<ProfessorSearchProps> = ({
           isBookedByCurrentUser,
           isBookedByAnyone,
           bookedByOthers: isBookedByAnyone && !isBookedByCurrentUser,
-          currentUserId
+          currentUserId,
         });
 
         return {
@@ -173,14 +184,17 @@ const ProfessorSearch: React.FC<ProfessorSearchProps> = ({
         };
       });
 
-      console.log('✅ Slots combinados finales:', combinedSlots.map(s => ({
-        id: s.id,
-        day: s.day,
-        time: s.start_time,
-        isBooked: s.isBooked,
-        isUnavailable: s.isUnavailable,
-        bookedByOthers: s.bookedByOthers
-      })));
+      console.log(
+        "✅ Slots combinados finales:",
+        combinedSlots.map((s) => ({
+          id: s.id,
+          day: s.day,
+          time: s.start_time,
+          isBooked: s.isBooked,
+          isUnavailable: s.isUnavailable,
+          bookedByOthers: s.bookedByOthers,
+        }))
+      );
 
       setAvailableSlots(combinedSlots);
       setFilteredSlots(combinedSlots);

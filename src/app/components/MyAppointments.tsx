@@ -10,7 +10,7 @@ import {
   X,
   AlertCircle,
   History,
-  CheckCircle2
+  CheckCircle2,
 } from "lucide-react";
 
 type Modality = "Presencial" | "Online";
@@ -37,11 +37,25 @@ interface Appointment {
   };
 }
 
+const dayMap: { [key: string]: number } = {
+  Lunes: 1,
+  Martes: 2,
+  Miércoles: 3,
+  Jueves: 4,
+  Viernes: 5,
+  Sábado: 6,
+  Domingo: 7,
+};
+
 const MyAppointments: React.FC = () => {
-  const [upcomingAppointments, setUpcomingAppointments] = useState<Appointment[]>([]);
+  const [upcomingAppointments, setUpcomingAppointments] = useState<
+    Appointment[]
+  >([]);
   const [pastAppointments, setPastAppointments] = useState<Appointment[]>([]);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<'upcoming' | 'history'>('upcoming');
+  const [activeTab, setActiveTab] = useState<"upcoming" | "history">(
+    "upcoming"
+  );
   const [cancellingId, setCancellingId] = useState<string | null>(null);
 
   useEffect(() => {
@@ -50,7 +64,9 @@ const MyAppointments: React.FC = () => {
 
   const loadAppointments = async () => {
     try {
-      const { data: { session } } = await supabase.auth.getSession();
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
 
       if (!session) {
         console.error("No hay sesión activa");
@@ -60,6 +76,7 @@ const MyAppointments: React.FC = () => {
       const now = new Date();
       const currentWeek = getISOWeek(now);
       const currentYear = getISOYear(now);
+      const currentDayIndex = now.getDay() || 7;
 
       // PASO 1: Cargar TODAS las appointments del alumno (quitamos el filtro de semana actual)
       const { data: appointments, error: appointmentsError } = await supabase
@@ -95,7 +112,10 @@ const MyAppointments: React.FC = () => {
         .in("id", professorIds);
 
       if (professorsError) {
-        console.error("Error cargando perfiles de profesores:", professorsError);
+        console.error(
+          "Error cargando perfiles de profesores:",
+          professorsError
+        );
         throw professorsError;
       }
 
@@ -113,22 +133,35 @@ const MyAppointments: React.FC = () => {
       const upcoming: Appointment[] = [];
       const history: Appointment[] = [];
 
-      enrichedAppointments.forEach(apt => {
-        // Lógica: Si el año es menor, o si es el mismo año pero semana anterior -> Historial
-        if (apt.year < currentYear || (apt.year === currentYear && apt.week_number < currentWeek)) {
+      enrichedAppointments.forEach((apt) => {
+        const aptDayIndex = dayMap[apt.day] || 0;
+
+        // Es pasado si:
+        // 1. El año es menor
+        // 2. El año es igual pero la semana es menor
+        // 3. El año y semana son iguales, pero el día ya pasó (índice día cita < índice hoy)
+        const isPastDate =
+          apt.year < currentYear ||
+          (apt.year === currentYear && apt.week_number < currentWeek) ||
+          (apt.year === currentYear &&
+            apt.week_number === currentWeek &&
+            aptDayIndex < currentDayIndex);
+
+        if (isPastDate) {
           history.push(apt);
         } else {
-          // Semana actual o futura
           upcoming.push(apt);
         }
       });
 
       setUpcomingAppointments(upcoming);
       setPastAppointments(history);
-
     } catch (error: any) {
       console.error("Error cargando reservas:", error);
-      alert("Error al cargar tus reservas: " + (error.message || "Error desconocido"));
+      alert(
+        "Error al cargar tus reservas: " +
+          (error.message || "Error desconocido")
+      );
     } finally {
       setLoading(false);
     }
@@ -149,11 +182,13 @@ const MyAppointments: React.FC = () => {
       if (error) throw error;
 
       // Actualizar estado localmente en ambas listas
-      const updateStatus = (list: Appointment[]) => 
-        list.map((apt) => apt.id === id ? { ...apt, status: "cancelled" } : apt);
+      const updateStatus = (list: Appointment[]) =>
+        list.map((apt) =>
+          apt.id === id ? { ...apt, status: "cancelled" } : apt
+        );
 
-      setUpcomingAppointments(prev => updateStatus(prev));
-      setPastAppointments(prev => updateStatus(prev));
+      setUpcomingAppointments((prev) => updateStatus(prev));
+      setPastAppointments((prev) => updateStatus(prev));
 
       alert("Reserva cancelada exitosamente");
     } catch (error: any) {
@@ -175,42 +210,47 @@ const MyAppointments: React.FC = () => {
   }
 
   // Determinar qué lista mostrar según el tab activo
-  const currentList = activeTab === 'upcoming' ? upcomingAppointments : pastAppointments;
-  
+  const currentList =
+    activeTab === "upcoming" ? upcomingAppointments : pastAppointments;
+
   // Filtrar canceladas para visualización (opcional: podrías querer mostrar las canceladas en el historial)
-  const activeAppointments = currentList.filter((apt) => apt.status === "confirmed");
-  const cancelledAppointments = currentList.filter((apt) => apt.status === "cancelled");
+  const activeAppointments = currentList.filter(
+    (apt) => apt.status === "confirmed"
+  );
+  const cancelledAppointments = currentList.filter(
+    (apt) => apt.status === "cancelled"
+  );
 
   return (
     <div className="space-y-6">
       {/* Pestañas de Navegación */}
       <div className="flex gap-4 border-b border-gray-200 dark:border-gray-700 pb-2">
         <button
-          onClick={() => setActiveTab('upcoming')}
+          onClick={() => setActiveTab("upcoming")}
           className={`flex items-center gap-2 pb-2 px-4 transition-colors relative ${
-            activeTab === 'upcoming'
-              ? 'text-blue-600 dark:text-blue-400 font-bold'
-              : 'text-gray-500 dark:text-gray-400 hover:text-gray-700'
+            activeTab === "upcoming"
+              ? "text-blue-600 dark:text-blue-400 font-bold"
+              : "text-gray-500 dark:text-gray-400 hover:text-gray-700"
           }`}
         >
           <Calendar className="w-4 h-4" />
           Semana Actual / Próximas
-          {activeTab === 'upcoming' && (
+          {activeTab === "upcoming" && (
             <span className="absolute bottom-0 left-0 w-full h-0.5 bg-blue-600 dark:bg-blue-400 rounded-t-full"></span>
           )}
         </button>
 
         <button
-          onClick={() => setActiveTab('history')}
+          onClick={() => setActiveTab("history")}
           className={`flex items-center gap-2 pb-2 px-4 transition-colors relative ${
-            activeTab === 'history'
-              ? 'text-blue-600 dark:text-blue-400 font-bold'
-              : 'text-gray-500 dark:text-gray-400 hover:text-gray-700'
+            activeTab === "history"
+              ? "text-blue-600 dark:text-blue-400 font-bold"
+              : "text-gray-500 dark:text-gray-400 hover:text-gray-700"
           }`}
         >
           <History className="w-4 h-4" />
           Historial Pasado
-          {activeTab === 'history' && (
+          {activeTab === "history" && (
             <span className="absolute bottom-0 left-0 w-full h-0.5 bg-blue-600 dark:bg-blue-400 rounded-t-full"></span>
           )}
         </button>
@@ -219,7 +259,9 @@ const MyAppointments: React.FC = () => {
       {/* Contenido de la Pestaña */}
       <div>
         <h3 className="text-2xl font-bold text-gray-800 dark:text-white mb-4 flex items-center gap-2">
-          {activeTab === 'upcoming' ? 'Reservas Activas' : 'Reservas Anteriores'}
+          {activeTab === "upcoming"
+            ? "Reservas Activas"
+            : "Reservas Anteriores"}
           <span className="text-sm font-normal text-gray-500 bg-gray-100 dark:bg-gray-800 px-2 py-1 rounded-full">
             {activeAppointments.length}
           </span>
@@ -227,7 +269,7 @@ const MyAppointments: React.FC = () => {
 
         {activeAppointments.length === 0 ? (
           <div className="bg-white dark:bg-gray-800 p-8 rounded-2xl shadow-lg text-center">
-            {activeTab === 'upcoming' ? (
+            {activeTab === "upcoming" ? (
               <>
                 <AlertCircle className="w-16 h-16 text-gray-400 mx-auto mb-4" />
                 <p className="text-gray-600 dark:text-gray-400">
@@ -251,7 +293,7 @@ const MyAppointments: React.FC = () => {
                 appointment={appointment}
                 onCancel={cancelAppointment}
                 cancelling={cancellingId === appointment.id}
-                isHistory={activeTab === 'history'}
+                isHistory={activeTab === "history"}
               />
             ))}
           </div>
@@ -273,7 +315,7 @@ const MyAppointments: React.FC = () => {
                 onCancel={cancelAppointment}
                 cancelling={false}
                 isCancelled
-                isHistory={activeTab === 'history'}
+                isHistory={activeTab === "history"}
               />
             ))}
           </div>
@@ -321,9 +363,13 @@ const AppointmentCard: React.FC<AppointmentCardProps> = ({
       )}
 
       <div className="flex items-center gap-3 mb-4 pb-3 border-b border-gray-200 dark:border-gray-700">
-        <div className={`w-10 h-10 rounded-full flex items-center justify-center ${
-            isHistory ? 'bg-gray-200 dark:bg-gray-700' : 'bg-blue-100 dark:bg-blue-900'
-        }`}>
+        <div
+          className={`w-10 h-10 rounded-full flex items-center justify-center ${
+            isHistory
+              ? "bg-gray-200 dark:bg-gray-700"
+              : "bg-blue-100 dark:bg-blue-900"
+          }`}
+        >
           <span className="text-xl">👩‍🏫</span>
         </div>
         <div>
@@ -338,37 +384,57 @@ const AppointmentCard: React.FC<AppointmentCardProps> = ({
 
       <div className="space-y-3 text-sm text-gray-700 dark:text-gray-300">
         <div className="flex items-center gap-2">
-          <Calendar className={`w-4 h-4 ${isHistory ? 'text-gray-400' : 'text-blue-500'}`} />
+          <Calendar
+            className={`w-4 h-4 ${
+              isHistory ? "text-gray-400" : "text-blue-500"
+            }`}
+          />
           <span className="font-semibold">
             {appointment.day} (Semana {appointment.week_number})
           </span>
         </div>
 
         <div className="flex items-center gap-2">
-          <Clock className={`w-4 h-4 ${isHistory ? 'text-gray-400' : 'text-blue-500'}`} />
+          <Clock
+            className={`w-4 h-4 ${
+              isHistory ? "text-gray-400" : "text-blue-500"
+            }`}
+          />
           <span>
             {appointment.start_time} ({appointment.duration} min)
           </span>
         </div>
 
         <div className="flex items-center gap-2">
-          <MapPin className={`w-4 h-4 ${isHistory ? 'text-gray-400' : 'text-blue-500'}`} />
+          <MapPin
+            className={`w-4 h-4 ${
+              isHistory ? "text-gray-400" : "text-blue-500"
+            }`}
+          />
           <span className="truncate">{appointment.location}</span>
         </div>
 
         <div className="flex items-center gap-2">
           {appointment.modality === "Presencial" ? (
-            <User className={`w-4 h-4 ${isHistory ? 'text-gray-500' : 'text-green-600'}`} />
+            <User
+              className={`w-4 h-4 ${
+                isHistory ? "text-gray-500" : "text-green-600"
+              }`}
+            />
           ) : (
-            <Video className={`w-4 h-4 ${isHistory ? 'text-gray-500' : 'text-purple-600'}`} />
+            <Video
+              className={`w-4 h-4 ${
+                isHistory ? "text-gray-500" : "text-purple-600"
+              }`}
+            />
           )}
           <span
             className={`font-semibold ${
-                isHistory 
-                ? 'text-gray-600 dark:text-gray-400' 
+              isHistory
+                ? "text-gray-600 dark:text-gray-400"
                 : appointment.modality === "Presencial"
-                    ? "text-green-600 dark:text-green-400"
-                    : "text-purple-600 dark:text-purple-400"
+                ? "text-green-600 dark:text-green-400"
+                : "text-purple-600 dark:text-purple-400"
             }`}
           >
             {appointment.modality}
@@ -411,7 +477,7 @@ const getISOWeek = (date: Date): number => {
   d.setHours(0, 0, 0, 0);
   d.setDate(d.getDate() + 4 - (d.getDay() || 7));
   const yearStart = new Date(d.getFullYear(), 0, 1);
-  return Math.ceil((((d.getTime() - yearStart.getTime()) / 86400000) + 1) / 7);
+  return Math.ceil(((d.getTime() - yearStart.getTime()) / 86400000 + 1) / 7);
 };
 
 const getISOYear = (date: Date): number => {

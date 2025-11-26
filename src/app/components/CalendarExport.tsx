@@ -12,8 +12,8 @@ interface Appointment {
   location: string;
   professor_id: string;
   notes?: string;
-  week_number: number; // Agregado al tipo
-  year: number; // Agregado al tipo
+  week_number: number;
+  year: number;
 }
 
 interface CalendarExportProps {
@@ -21,7 +21,17 @@ interface CalendarExportProps {
   userRole: "alumno" | "profesor";
 }
 
-// --- FUNCIONES HELPER PARA FECHAS (Agregadas) ---
+// Mapa de días para convertir a números comparables
+const dayMap: { [key: string]: number } = {
+  Lunes: 1,
+  Martes: 2,
+  Miércoles: 3,
+  Jueves: 4,
+  Viernes: 5,
+  Sábado: 6,
+  Domingo: 7,
+};
+
 const getISOWeek = (date: Date): number => {
   const d = new Date(date);
   d.setHours(0, 0, 0, 0);
@@ -35,9 +45,7 @@ const getISOYear = (date: Date): number => {
   d.setDate(d.getDate() + 4 - (d.getDay() || 7));
   return d.getFullYear();
 };
-// -----------------------------------------------
 
-// Función para generar archivo ICS
 const generateICS = (events: any[]): string => {
   const formatDate = (date: Date): string => {
     return date.toISOString().replace(/[-:]/g, "").split(".")[0] + "Z";
@@ -104,31 +112,15 @@ const CalendarExport: React.FC<CalendarExportProps> = ({
   const [isExporting, setIsExporting] = useState(false);
   const [exportCount, setExportCount] = useState(0);
 
-  // Convertir día de semana a fecha de esta semana
   const getDayDate = (dayName: string, time: string): Date => {
-    const days: { [key: string]: number } = {
-      Lunes: 1,
-      Martes: 2,
-      Miércoles: 3,
-      Jueves: 4,
-      Viernes: 5,
-    };
-
     const today = new Date();
-    const currentDay = today.getDay() || 7; // Domingo = 7
-    const targetDay = days[dayName];
+    const currentDay = today.getDay() || 7;
+    const targetDay = dayMap[dayName];
 
     let daysToAdd = targetDay - currentDay;
-
-    // Lógica ajustada: Si filtramos por semana actual, queremos la fecha exacta de esa semana
-    // incluso si el día ya pasó (para tener el registro histórico en el calendario)
-    // Si daysToAdd es negativo y queremos la próxima semana, mantenemos la lógica original,
-    // pero como filtramos por week_number, esto debería coincidir con la semana actual.
-
     const targetDate = new Date(today);
     targetDate.setDate(today.getDate() + daysToAdd);
 
-    // Establecer la hora
     const [hours, minutes] = time.split(":").map(Number);
     targetDate.setHours(hours, minutes, 0, 0);
 
@@ -138,69 +130,64 @@ const CalendarExport: React.FC<CalendarExportProps> = ({
   const handleExport = async () => {
     setIsExporting(true);
     try {
-      console.log("🔍 Exportando para:", { userId, userRole });
-
-      // 1. OBTENER SEMANA ACTUAL
       const now = new Date();
       const currentWeek = getISOWeek(now);
       const currentYear = getISOYear(now);
+      const currentDayIndex = now.getDay() || 7; // 1=Lunes ... 7=Domingo
 
-      // 2. MODIFICAR CONSULTA PARA FILTRAR POR SEMANA Y AÑO
       const { data: appointments, error: appointmentsError } = await supabase
         .from("appointments")
         .select("*")
         .eq(userRole === "alumno" ? "student_id" : "professor_id", userId)
         .eq("status", "confirmed")
-        .eq("week_number", currentWeek) // <--- FILTRO CLAVE AGREGADO
-        .eq("year", currentYear) // <--- FILTRO CLAVE AGREGADO
+        .eq("week_number", currentWeek)
+        .eq("year", currentYear)
         .order("day", { ascending: true })
         .order("start_time", { ascending: true });
 
-      console.log(
-        "📅 Appointments obtenidas (Semana actual):",
-        appointments?.length || 0,
-        appointments
-      );
-
-      if (appointmentsError) {
-        console.error("❌ Error obteniendo appointments:", appointmentsError);
-        throw appointmentsError;
-      }
+      if (appointmentsError) throw appointmentsError;
 
       if (!appointments || appointments.length === 0) {
-        alert("No tienes citas confirmadas esta semana para exportar");
+        alert("No tienes citas confirmadas para exportar esta semana");
         setIsExporting(false);
         return;
       }
 
-      // Obtener información de los profesores separadamente
-      let professorNames: { [key: string]: string } = {};
+      // --- NUEVO FILTRO: Eliminar días pasados ---
+      const futureAppointments = appointments.filter((apt: any) => {
+        const aptDayIndex = dayMap[apt.day] || 0;
+        // Incluimos el día de hoy (>=) y futuros. Eliminamos anteriores (<).
+        return aptDayIndex >= currentDayIndex;
+      });
 
+      if (futureAppointments.length === 0) {
+        alert("Todas tus citas de esta semana ya pasaron.");
+        setIsExporting(false);
+        return;
+      }
+
+      // Obtener nombres de profesores (solo si es alumno)
+      let professorNames: { [key: string]: string } = {};
       if (userRole === "alumno") {
         const professorIds = [
-          ...new Set(appointments.map((apt: any) => apt.professor_id)),
+          ...new Set(futureAppointments.map((apt: any) => apt.professor_id)),
         ];
-
-        const { data: professors, error: profError } = await supabase
+        const { data: professors } = await supabase
           .from("profiles")
           .select("id, username")
           .in("id", professorIds);
 
-        if (profError) {
-          console.error("⚠️ Error obteniendo profesores:", profError);
-        } else if (professors) {
+        if (professors) {
           professorNames = Object.fromEntries(
             professors.map((p: any) => [p.id, p.username])
           );
         }
       }
 
-      // Convertir appointments a eventos ICS
-      const events = appointments.map((apt: any) => {
+      const events = futureAppointments.map((apt: any) => {
         const startDate = getDayDate(apt.day, apt.start_time);
         const endDate = new Date(startDate);
         endDate.setMinutes(endDate.getMinutes() + apt.duration);
-
         const professorName = professorNames[apt.professor_id] || "Profesor";
 
         return {
@@ -211,35 +198,25 @@ const CalendarExport: React.FC<CalendarExportProps> = ({
               : `Consulta - ${apt.modality}`,
           description: `Modalidad: ${apt.modality}\nDuración: ${
             apt.duration
-          } minutos${apt.notes ? `\n\nNotas: ${apt.notes}` : ""}`,
+          } min\nNotas: ${apt.notes || ""}`,
           location: apt.location,
           start: startDate,
           end: endDate,
         };
       });
 
-      console.log("📤 Eventos a exportar:", events);
-
-      // Generar archivo ICS
-      const icsContent = generateICS(events);
-      const filename = `consultas-semana-${currentWeek}-${
-        new Date().toISOString().split("T")[0]
-      }.ics`;
-
-      downloadICS(icsContent, filename);
-      setExportCount(events.length);
-
-      // Mostrar mensaje de éxito
-      setTimeout(() => {
-        alert(
-          `✅ ${events.length} cita(s) de esta semana exportadas exitosamente!\n\nRevisa tus descargas.`
-        );
-      }, 500);
-    } catch (error: any) {
-      console.error("❌ Error exportando:", error);
-      alert(
-        `Error al exportar las citas: ${error.message || "Error desconocido"}`
+      downloadICS(
+        generateICS(events),
+        `consultas-futuras-${new Date().toISOString().split("T")[0]}.ics`
       );
+      setExportCount(events.length);
+      setTimeout(
+        () => alert(`✅ ${events.length} cita(s) futuras exportadas.`),
+        500
+      );
+    } catch (error: any) {
+      console.error("Error:", error);
+      alert("Error al exportar citas");
     } finally {
       setIsExporting(false);
     }
@@ -253,59 +230,26 @@ const CalendarExport: React.FC<CalendarExportProps> = ({
         </div>
         <div>
           <h3 className="font-bold text-gray-800 dark:text-white">
-            Exportar Calendario Semanal
+            Exportar Próximas Citas
           </h3>
           <p className="text-sm text-gray-600 dark:text-gray-400">
-            Descarga tus citas de la semana actual
+            Descarga solo las citas pendientes de esta semana
           </p>
         </div>
       </div>
-
-      <div className="space-y-3">
-        <button
-          onClick={handleExport}
-          disabled={isExporting}
-          className="w-full bg-blue-600 text-white font-semibold py-3 px-4 rounded-lg hover:bg-blue-700 transition-colors flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
-        >
-          {isExporting ? (
-            <>
-              <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-              Exportando...
-            </>
-          ) : (
-            <>
-              <Download className="w-4 h-4" />
-              Exportar Semana Actual (.ics)
-            </>
-          )}
-        </button>
-
-        {exportCount > 0 && (
-          <div className="flex items-center gap-2 p-3 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg">
-            <Check className="w-4 h-4 text-green-600 dark:text-green-400" />
-            <span className="text-sm text-green-700 dark:text-green-400">
-              {exportCount} cita(s) exportadas
-            </span>
-          </div>
+      <button
+        onClick={handleExport}
+        disabled={isExporting}
+        className="w-full bg-blue-600 text-white font-semibold py-3 px-4 rounded-lg hover:bg-blue-700 transition-colors flex items-center justify-center gap-2 disabled:opacity-50"
+      >
+        {isExporting ? (
+          "Exportando..."
+        ) : (
+          <>
+            <Download className="w-4 h-4" /> Exportar Pendientes (.ics)
+          </>
         )}
-      </div>
-
-      <div className="mt-4 p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg space-y-2">
-        <p className="text-xs font-semibold text-blue-800 dark:text-blue-400">
-          📅 Compatible con:
-        </p>
-        <div className="grid grid-cols-2 gap-2 text-xs text-blue-700 dark:text-blue-400">
-          <div className="flex items-center gap-1">
-            <span>✓</span> Google Calendar
-          </div>
-          <div className="flex items-center gap-1">
-            <span>✓</span> Outlook
-          </div>
-          <div className="flex items-center gap-1">
-            <span>✓</span> Apple Calendar
-          </div>
-        </div>
-      </div>
+      </button>
     </div>
   );
 };

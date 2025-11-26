@@ -14,6 +14,16 @@ import {
 type Modality = "Presencial" | "Online";
 type DayOfWeek = "Lunes" | "Martes" | "Miércoles" | "Jueves" | "Viernes";
 
+const dayMap: { [key: string]: number } = {
+  Lunes: 1,
+  Martes: 2,
+  Miércoles: 3,
+  Jueves: 4,
+  Viernes: 5,
+  Sábado: 6,
+  Domingo: 7,
+};
+
 interface Appointment {
   id: string;
   slot_id: string;
@@ -155,26 +165,36 @@ const ProfessorAppointments: React.FC = () => {
     );
   }
 
-  const activeAppointments = appointments.filter(
-    (apt) => apt.status === "confirmed"
-  );
+  const todayIndex = new Date().getDay() || 7;
+
+  const activeAppointments = appointments.filter((apt) => {
+    const aptDayIndex = dayMap[apt.day] || 0;
+    // Solo mostrar en activas si status es confirmed Y el día es hoy o futuro
+    return apt.status === "confirmed" && aptDayIndex >= todayIndex;
+  });
+
+  const pastDaysAppointments = appointments.filter((apt) => {
+    const aptDayIndex = dayMap[apt.day] || 0;
+    return apt.status === "confirmed" && aptDayIndex < todayIndex;
+  });
+
   const cancelledAppointments = appointments.filter(
     (apt) => apt.status === "cancelled"
   );
 
   return (
     <div className="space-y-6">
-      {/* Reservas Activas */}
+      {/* Reservas Activas (Pendientes esta semana) */}
       <div>
         <h3 className="text-2xl font-bold text-gray-800 dark:text-white mb-4">
-          Reservas Activas ({activeAppointments.length})
+          Próximas Reservas ({activeAppointments.length})
         </h3>
-
+        {/* ... renderizado de activeAppointments ... */}
         {activeAppointments.length === 0 ? (
           <div className="bg-white dark:bg-gray-800 p-8 rounded-2xl shadow-lg text-center">
             <AlertCircle className="w-16 h-16 text-gray-400 mx-auto mb-4" />
             <p className="text-gray-600 dark:text-gray-400">
-              No tienes reservas activas de alumnos para esta semana.
+              No tienes más reservas pendientes para esta semana.
             </p>
           </div>
         ) : (
@@ -190,6 +210,28 @@ const ProfessorAppointments: React.FC = () => {
           </div>
         )}
       </div>
+
+      {/* OPCIONAL: Mostrar las que ya pasaron esta semana como "Finalizadas" */}
+      {pastDaysAppointments.length > 0 && (
+        <div className="mt-8 opacity-75">
+          <h3 className="text-xl font-bold text-gray-800 dark:text-white mb-4 flex items-center gap-2">
+            <span className="text-green-600">✓</span> Finalizadas esta semana (
+            {pastDaysAppointments.length})
+          </h3>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {pastDaysAppointments.map((appointment) => (
+              <AppointmentCard
+                key={appointment.id}
+                appointment={appointment}
+                onCancel={() => {}} // No permitir cancelar pasado
+                cancelling={false}
+                isCancelled={false}
+                // Podrías agregar un prop 'isPast' a AppointmentCard para quitar botones
+              />
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Reservas Canceladas */}
       {cancelledAppointments.length > 0 && (
